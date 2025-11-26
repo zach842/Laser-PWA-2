@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Defender Pro DryFire Trainer (PWA)</title>
+  <title>Defender Pro – Camera PWA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="style.css" />
@@ -11,20 +11,22 @@
   <div id="splash">
     <div class="splash-inner">
       <h1>DEFENDER PRO</h1>
-      <p>DryFire Trainer – Standalone PWA</p>
+      <p>Camera DryFire Trainer – Standalone PWA</p>
     </div>
   </div>
 
   <div id="app" class="app hidden">
     <div class="top-bar">
       <div class="brand">Defender Pro</div>
-      <div class="status" id="statusText">Idle</div>
+      <div class="status" id="statusText">Requesting camera…</div>
     </div>
 
     <div class="layout">
       <div class="target-panel">
         <div class="target-frame">
-          <img id="targetImg" alt="Target" />
+          <!-- Live camera feed -->
+          <video id="cam" autoplay playsinline muted></video>
+          <!-- Overlay for play zone + hits + tic-tac-toe grid -->
           <canvas id="targetOverlay"></canvas>
         </div>
       </div>
@@ -60,7 +62,7 @@
         </div>
 
         <div class="panel-section buttons">
-          <button id="btnStart" class="primary">START ROUND</button>
+          <button id="btnStart" class="primary">ARM ROUND</button>
           <button id="btnStop" class="danger">STOP</button>
         </div>
 
