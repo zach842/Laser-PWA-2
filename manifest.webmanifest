@@ -1,6 +1,6 @@
 {
-  "name": "Defender Pro Full Logic PWA",
-  "short_name": "DefenderPro",
+  "name": "Defender Pro Camera PWA",
+  "short_name": "DefenderCam",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#111612",
