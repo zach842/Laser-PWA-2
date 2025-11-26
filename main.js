@@ -1,13 +1,15 @@
-// Defender Pro PWA – full standalone logic
+// Defender Pro – camera-based PWA red-laser detection
 
-const targetImg = document.getElementById("targetImg");
+const videoEl = document.getElementById("cam");
 const overlay = document.getElementById("targetOverlay");
+
 const modeSelect = document.getElementById("modeSelect");
 const shotsSelect = document.getElementById("shotsSelect");
 const yardsSelect = document.getElementById("yardsSelect");
 const btnStart = document.getElementById("btnStart");
 const btnStop = document.getElementById("btnStop");
 const btnReplayLast = document.getElementById("btnReplayLast");
+
 const statusText = document.getElementById("statusText");
 const statRoundState = document.getElementById("statRoundState");
 const statShots = document.getElementById("statShots");
@@ -15,9 +17,11 @@ const statShotsGoal = document.getElementById("statShotsGoal");
 const statMode = document.getElementById("statMode");
 const statWinner = document.getElementById("statWinner");
 const historyList = document.getElementById("historyList");
+
 const replayModal = document.getElementById("replayModal");
 const btnCloseReplay = document.getElementById("btnCloseReplay");
 const replayCanvas = document.getElementById("replayCanvas");
+
 const sndHit = document.getElementById("sndHit");
 const sndBeep = document.getElementById("sndBeep");
 
@@ -28,7 +32,7 @@ const TARGET_IMAGES = {
   intruder: "assets/intruder.png",
 };
 
-// play button zones in normalized coords
+// PLAY zones (normalized)
 const PLAY_ZONES = {
   bullseye: { x: 0.4, y: 0.85, w: 0.2, h: 0.1 },
   tic_tac_toe: { x: 0.4, y: 0.85, w: 0.2, h: 0.1 },
@@ -40,11 +44,23 @@ let currentRound = null;
 let roundHistory = [];
 let replayAnimation = null;
 
+let hiddenCanvas = document.createElement("canvas");
+let hiddenCtx = hiddenCanvas.getContext("2d");
+
+// detection thresholds – tweak these for your laser
+const RED_MIN = 180;
+const RED_GREEN_DIFF = 80;
+const RED_BLUE_DIFF = 80;
+const MIN_BLOB_AREA = 40; // px^2
+const HIT_COOLDOWN_MS = 120;
+
+let lastHitTime = 0;
+
 window.addEventListener("load", () => {
   setTimeout(() => {
     document.getElementById("splash").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
-    setModeImage(modeSelect.value);
+    initCamera();
     resizeOverlay();
     loadHistory();
     renderHistory();
@@ -54,43 +70,93 @@ window.addEventListener("load", () => {
 
 window.addEventListener("resize", resizeOverlay);
 function resizeOverlay() {
-  const rect = targetImg.getBoundingClientRect();
+  const rect = videoEl.getBoundingClientRect();
   overlay.width = rect.width || 640;
   overlay.height = rect.height || 360;
 }
 
-function setModeImage(mode) {
-  targetImg.src = TARGET_IMAGES[mode] || TARGET_IMAGES["bullseye"];
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false,
+    });
+    videoEl.srcObject = stream;
+    videoEl.onloadedmetadata = () => {
+      videoEl.play();
+      statusText.textContent = "Camera ready";
+      startDetectionLoop();
+    };
+  } catch (e) {
+    console.error(e);
+    statusText.textContent = "Camera blocked (allow access)";
+  }
 }
 
-modeSelect.addEventListener("change", () => {
-  const mode = modeSelect.value;
-  setModeImage(mode);
-  document.getElementById("shotsSection").style.display =
-    mode === "bullseye" ? "block" : "none";
-  statMode.textContent = mode;
-  drawOverlay();
-});
+function startDetectionLoop() {
+  function loop() {
+    if (videoEl.readyState >= 2) {
+      const vw = videoEl.videoWidth;
+      const vh = videoEl.videoHeight;
+      if (vw && vh) {
+        hiddenCanvas.width = vw;
+        hiddenCanvas.height = vh;
+        hiddenCtx.drawImage(videoEl, 0, 0, vw, vh);
+        runDetectionOnFrame(vw, vh);
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
 
-btnStart.addEventListener("click", () => {
-  startRound();
-});
-
-btnStop.addEventListener("click", () => {
+function runDetectionOnFrame(vw, vh) {
   if (!currentRound) return;
-  currentRound.state = "finished";
-  addEvent("finish", { manual: true });
-  finalizeRound();
-});
+  const now = performance.now();
+  if (now - lastHitTime < HIT_COOLDOWN_MS) return;
 
-overlay.addEventListener("click", (e) => {
-  const rect = overlay.getBoundingClientRect();
-  const xNorm = (e.clientX - rect.left) / rect.width;
-  const yNorm = (e.clientY - rect.top) / rect.height;
+  const frame = hiddenCtx.getImageData(0, 0, vw, vh);
+  const data = frame.data;
+  let minX = vw,
+    minY = vh,
+    maxX = -1,
+    maxY = -1,
+    count = 0;
 
-  if (!currentRound) return;
+  const stepX = 4 * 4; // sample every 4 pixels horizontally
+  for (let y = 0; y < vh; y += 2) {
+    let idx = y * vw * 4;
+    for (let x = 0; x < vw; x += 4) {
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      if (
+        r > RED_MIN &&
+        r - g > RED_GREEN_DIFF &&
+        r - b > RED_BLUE_DIFF
+      ) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+        count++;
+      }
+      idx += stepX;
+    }
+  }
+
+  const blobW = maxX - minX;
+  const blobH = maxY - minY;
+  const area = blobW * blobH;
+  if (area < MIN_BLOB_AREA || count === 0) return;
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const xNorm = cx / vw;
+  const yNorm = cy / vh;
 
   const zone = PLAY_ZONES[currentRound.mode];
+
   if (currentRound.state === "armed" && zone) {
     if (
       xNorm >= zone.x &&
@@ -98,16 +164,29 @@ overlay.addEventListener("click", (e) => {
       yNorm >= zone.y &&
       yNorm <= zone.y + zone.h
     ) {
+      lastHitTime = now;
+      sndBeep.play().catch(() => {});
       beginCountdown();
       return;
     }
+  } else if (currentRound.state === "active") {
+    lastHitTime = now;
+    sndHit.play().catch(() => {});
+    handleHit(xNorm, yNorm);
+    drawOverlay();
   }
+}
 
-  if (currentRound.state !== "active") return;
+// Round lifecycle
 
-  sndHit.play().catch(() => {});
-  handleHit(xNorm, yNorm);
-  drawOverlay();
+btnStart.addEventListener("click", () => {
+  startRound();
+});
+btnStop.addEventListener("click", () => {
+  if (!currentRound) return;
+  currentRound.state = "finished";
+  addEvent("finish", { manual: true });
+  finalizeRound();
 });
 
 function startRound() {
@@ -121,7 +200,7 @@ function startRound() {
     mode,
     yards,
     shotsGoal,
-    state: "armed", // armed -> countdown -> active -> finished
+    state: "armed",
     startTs: performance.now(),
     events: [],
     shots: 0,
@@ -135,6 +214,7 @@ function startRound() {
     goTs: null,
   };
   addEvent("armed");
+  lastHitTime = 0;
   updateUI();
   drawOverlay();
 }
@@ -147,10 +227,10 @@ function addEvent(kind, extra = {}) {
 
 function beginCountdown() {
   if (!currentRound) return;
+  if (currentRound.state !== "armed") return;
   currentRound.state = "countdown";
   addEvent("countdown_start");
   updateUI();
-  sndBeep.play().catch(() => {});
   let count = 3;
   const interval = setInterval(() => {
     if (!currentRound || currentRound.state !== "countdown") {
@@ -166,7 +246,7 @@ function beginCountdown() {
       return;
     }
     count -= 1;
-  }, 700);
+  }, 600);
 }
 
 function handleHit(xNorm, yNorm) {
@@ -286,11 +366,9 @@ function drawOverlay() {
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   if (!currentRound) return;
-
   const w = overlay.width;
   const h = overlay.height;
 
-  // play zone
   const zone = PLAY_ZONES[currentRound.mode];
   if (zone && currentRound.state === "armed") {
     ctx.save();
@@ -309,7 +387,6 @@ function drawOverlay() {
     ctx.restore();
   }
 
-  // tic-tac-toe grid & marks
   if (currentRound.mode === "tic_tac_toe") {
     const b = currentRound.board;
     ctx.save();
@@ -344,7 +421,6 @@ function drawOverlay() {
     ctx.restore();
   }
 
-  // hits
   const events = currentRound.events || [];
   for (const ev of events) {
     if (ev.kind !== "hit") continue;
@@ -383,6 +459,8 @@ function updateUI() {
     statWinner.textContent = currentRound.winner || "-";
   }
 }
+
+// History + replay
 
 btnReplayLast.addEventListener("click", () => {
   if (!roundHistory.length) {
@@ -457,7 +535,10 @@ function playReplay(round) {
 
 function saveHistory() {
   try {
-    localStorage.setItem("defenderProRoundsFull", JSON.stringify(roundHistory));
+    localStorage.setItem(
+      "defenderProCameraRounds",
+      JSON.stringify(roundHistory)
+    );
   } catch (e) {
     console.warn("Could not save history", e);
   }
@@ -465,7 +546,7 @@ function saveHistory() {
 
 function loadHistory() {
   try {
-    const raw = localStorage.getItem("defenderProRoundsFull");
+    const raw = localStorage.getItem("defenderProCameraRounds");
     roundHistory = raw ? JSON.parse(raw) : [];
   } catch (e) {
     roundHistory = [];
@@ -492,7 +573,7 @@ function renderHistory() {
   }
 }
 
-// service worker
+// Service worker registration
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("service-worker.js")
