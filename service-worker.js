@@ -1,4 +1,4 @@
-const CACHE_NAME = "defender-pro-full-pwa-v1";
+const CACHE_NAME = "defender-pro-camera-pwa-v1";
 const URLS_TO_CACHE = [
   "./",
   "./index.html",
