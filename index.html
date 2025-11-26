@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Defender Pro DryFire Trainer (PWA)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="splash">
+    <div class="splash-inner">
+      <h1>DEFENDER PRO</h1>
+      <p>DryFire Trainer – Standalone PWA</p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <div class="top-bar">
+      <div class="brand">Defender Pro</div>
+      <div class="status" id="statusText">Idle</div>
+    </div>
+
+    <div class="layout">
+      <div class="target-panel">
+        <div class="target-frame">
+          <img id="targetImg" alt="Target" />
+          <canvas id="targetOverlay"></canvas>
+        </div>
+      </div>
+
+      <div class="control-panel">
+        <div class="panel-section">
+          <label for="modeSelect">Round Type</label>
+          <select id="modeSelect">
+            <option value="bullseye">Bullseye</option>
+            <option value="tic_tac_toe">Tic Tac Toe</option>
+            <option value="draw_dual">Draw Duel</option>
+            <option value="intruder">Intruder</option>
+          </select>
+        </div>
+
+        <div class="panel-section" id="shotsSection">
+          <label for="shotsSelect">Shots (Bullseye)</label>
+          <select id="shotsSelect">
+            <option value="5">5 shots</option>
+            <option value="10" selected>10 shots</option>
+            <option value="25">25 shots</option>
+          </select>
+        </div>
+
+        <div class="panel-section">
+          <label for="yardsSelect">Distance (yards)</label>
+          <select id="yardsSelect">
+            <option value="3">3</option>
+            <option value="5" selected>5</option>
+            <option value="7">7</option>
+            <option value="10">10</option>
+          </select>
+        </div>
+
+        <div class="panel-section buttons">
+          <button id="btnStart" class="primary">START ROUND</button>
+          <button id="btnStop" class="danger">STOP</button>
+        </div>
+
+        <div class="panel-section stats">
+          <div>State: <span id="statRoundState">idle</span></div>
+          <div>Mode: <span id="statMode">bullseye</span></div>
+          <div>Shots: <span id="statShots">0</span> / <span id="statShotsGoal">10</span></div>
+          <div>Winner: <span id="statWinner">-</span></div>
+        </div>
+
+        <div class="panel-section">
+          <button id="btnReplayLast" class="secondary">Replay Last Round</button>
+        </div>
+
+        <div class="panel-section history">
+          <h3>Previous Rounds</h3>
+          <div id="historyList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="replayModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>Round Replay</div>
+          <button id="btnCloseReplay">&times;</button>
+        </div>
+        <div class="modal-body">
+          <canvas id="replayCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="sndHit" src="assets/steel-hit.mp3" preload="auto"></audio>
+  <audio id="sndBeep" src="assets/beep.mp3" preload="auto"></audio>
+
+  <script src="main.js"></script>
+</body>
+</html>
